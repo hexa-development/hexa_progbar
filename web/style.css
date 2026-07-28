@@ -1,0 +1,139 @@
+/* ============================================================================
+   hexa_progbar · consumer layer ทับบน rb-ui.css  (rb-ui.css ต้องโหลดก่อน)
+   ----------------------------------------------------------------------------
+   พื้นผิว, สเกลตัวอักษร, ไอคอนและ track มาจาก design system ทั้งหมด:
+
+     .rb-surface                    · พื้นผิวของกล่อง
+     .rb-progress / __bar           · ตัว track  (ดูหมายเหตุเรื่อง fill ข้างล่าง)
+
+   ที่นี่มีเฉพาะสิ่งที่ rb-ui ไม่มีทางรู้เกี่ยวกับเลเยอร์ progress:
+     1. dock กลางจอด้านล่าง,
+     2. การขับ fill — .rb-progress__bar ของ rb-ui วิ่งด้วย `width` ซึ่งเป็น
+        layout property บน transition 240ms ease แต่ fill ของ progress ถูกขับ
+        ตลอดทั้งรอบ ไฟล์นี้จึงเปลี่ยนไปขับด้วย transform:scaleX แทน
+        (composite ล้วน, linear) ส่วน bar ของ rb-ui เองไม่ถูกแตะ
+     3. รูปทรงเดียวที่มี: แถบตรึงกลางจอด้านล่าง (แถบลอยเหนือหัวถูกตัดออกแล้ว),
+     4. การเข้า/ออก + สถานะจบ/ถูกยกเลิก
+   ========================================================================= */
+
+/* ---------------------------------------------------------------- layer -- */
+.rbp-layer{
+  position:fixed; inset:0; z-index:var(--rb-z-modal);
+  pointer-events:none;                 /* progress ไม่กินคลิก */
+  overflow:hidden;
+}
+
+/* --- dock กลางจอด้านล่าง ------------------------------------------------- */
+/* ค่า --rbp-* ถูกเขียนลงมาจาก app.js ตาม Config (BottomOffset/MinWidth/MaxWidth)
+   ค่าใน :root ตรงนี้เป็น fallback ตอนที่ยังไม่มีรอบไหนเริ่มเลย
+   จัดกึ่งกลางด้วย left:50% + translateX(-50%) ไม่ใช่ inset:0 + margin:auto
+   เพราะ dock ต้องกว้างเท่าแถบข้างใน (shrink-to-fit) ไม่ใช่เต็มจอ */
+.rbp-dock{
+  --rbp-bottom:12vh;
+  --rbp-min-w:34vh;
+  --rbp-max-w:60vh;
+
+  position:absolute;
+  left:50%;
+  bottom:var(--rbp-bottom);
+  transform:translateX(-50%);
+  display:flex; flex-direction:column-reverse; align-items:center;
+  gap:1vh;
+}
+
+/* live region ของ screen reader มีตั้งแต่เฟรมแรกและไม่ถูกสร้างใหม่ */
+.rbp-sr{
+  position:absolute; width:1px; height:1px; margin:-1px; padding:0;
+  overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap;
+}
+
+/* ================================================================== fill == */
+/* element ถูก layout เต็มความกว้างแล้วบีบด้วย scaleX เบราว์เซอร์จึงขับทั้งรอบ
+   บน compositor โดยไม่ต้องรับข้อความรายเฟรมจาก Lua เลย
+   transform-origin:left = โตจากขอบซ้าย */
+.rbp-fill{
+  height:100%; width:100%;
+  /* --rb-accent ในธีมนี้คือ #fff เพียว ๆ ซึ่งอ่านเป็นแถบขาวโพลน ใช้ accent
+     แบบหรี่แทน fill จะได้เป็นสีขาวนวลตัดกับ track */
+  background:var(--rb-accent-dim);
+  border-radius:inherit;
+  transform:scaleX(0); transform-origin:left center;
+  will-change:transform;
+}
+/* ค่า duration จริงของแต่ละรอบถูกเขียนเป็น inline `!important` ลงบน fill โดย
+   app.js — ดูหมายเหตุในไฟล์นั้น ลำดับความสำคัญนั้นตั้งใจ: reduced-motion reset
+   ของ rb-ui.css (`*{ animation-duration:.01ms !important }`) จะยุบ fill นี้ให้
+   วาบเป็น 100% ทันที ค่า 5000ms ตรงนี้เป็นแค่ fallback กรณีปกติถ้าค่า inline
+   ไม่ได้ทำงาน */
+.rbp-run .rbp-fill{
+  animation-name:rbp-fill;
+  animation-duration:5000ms;
+  animation-timing-function:linear;
+  animation-fill-mode:forwards;
+}
+@keyframes rbp-fill{ from{ transform:scaleX(0); } to{ transform:scaleX(1); } }
+
+/* รอบที่ถูกยกเลิกจะแช่ fill ไว้ตรงที่ค้างแล้วย้อมสี การ pause animation คือ
+   สิ่งที่ค้างค่าไว้ — ไม่มี width ให้อ่านย้อนกลับ */
+.rbp-cancelled .rbp-fill{ animation-play-state:paused; background:var(--rb-error); }
+.rbp-done .rbp-fill{ background:var(--rb-success); }
+
+/* ======================================================= แถบกลางจอล่าง ==== */
+/* แถบนี้อยู่หน้า HUD ของเกม ไม่ได้อยู่หน้าหญ้ากับท้องฟ้าเหมือนแถบลอยเดิม
+   จึงพึ่งพื้นผิวของ design system ได้ตรง ๆ ไม่ต้องมีขอบคมช่วยอ่าน */
+.rbp-bar{
+  display:flex; align-items:center; gap:1.4vh;
+  padding:1.2vh 1.8vh;
+  min-width:var(--rbp-min-w);
+  max-width:var(--rbp-max-w);
+  background:var(--rb-surface-1);
+  border-radius:var(--rb-r-md);
+  box-shadow:var(--rb-shadow-2),var(--rb-inset-sel);
+  will-change:transform,opacity;
+}
+
+.rbp-bar__icon{ flex-shrink:0; display:grid; place-items:center; color:var(--rb-text-2); }
+.rbp-bar__icon .material-symbols-outlined{ font-size:2.4vh; }
+
+/* min-width:0 คือสิ่งที่ทำให้ ellipsis ของ title ทำงาน — flex item มี
+   min-width:auto เป็นค่าตั้งต้น ซึ่งไม่ยอมหดต่ำกว่าความกว้างของข้อความ
+   แถบจึงจะทะลุ max-width ออกไปแทนที่จะตัดคำ */
+.rbp-bar__body{ flex:1; min-width:0; display:flex; flex-direction:column; gap:0.9vh; }
+
+/* แถวหัวเรื่อง: label กับตัวเลขวินาทีที่เหลือ (ถ้าเปิด showRemaining)
+   แชร์บรรทัดเดียวกัน */
+.rbp-bar__head{ display:flex; align-items:baseline; gap:1.2vh; }
+.rbp-bar__title{
+  flex:1; min-width:0;
+  font-size:var(--rb-fs-body);
+  font-weight:var(--rb-fw-medium);
+  color:var(--rb-text);
+  line-height:1.25;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.rbp-bar__time{
+  flex-shrink:0;
+  font-size:var(--rb-fs-sm);
+  font-weight:var(--rb-fw-medium);
+  color:var(--rb-text-3);
+  font-variant-numeric:tabular-nums;   /* กันแถบกระตุกทุกครั้งที่ตัวเลขเปลี่ยน */
+}
+.rbp-bar__track{ height:0.7vh; }
+
+.rbp-bar.rbp-cancelled .rbp-bar__icon{ color:var(--rb-error); }
+.rbp-bar.rbp-done .rbp-bar__icon{ color:var(--rb-success); }
+.rbp-bar.rbp-cancelled .rbp-bar__time{ color:var(--rb-error); }
+
+/* --------------------------------------------------------------- motion -- */
+/* เข้า/ออกด้วยการเลื่อนขึ้นจากขอบล่าง + จาง ไม่มี JS มาเขียน transform ทับ
+   รายเฟรมแล้ว (แถบลอยเดิมทำแบบนั้น จึงเข้าออกด้วย opacity ได้อย่างเดียว) */
+.rbp-bar{ transition:opacity var(--rb-t),transform var(--rb-t); }
+.rbp-bar.is-entering,
+.rbp-bar.is-leaving{ opacity:0; transform:translateY(1.6vh); }
+
+/* fill คือข้อมูลเอง — มันวิ่งต่อ ตัดทิ้งเฉพาะการเข้าออกที่เป็นของประดับ */
+@media (prefers-reduced-motion:reduce){
+  .rbp-bar{ transition-duration:.01ms; }
+  .rbp-bar.is-entering,
+  .rbp-bar.is-leaving{ transform:none; }
+}

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hexa_progbar</title>
+    <link rel="stylesheet" href="rb-ui.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="rbp-layer" class="rbp-layer">
+        <!-- แถบตรึงกลางจอด้านล่าง ตำแหน่งเป็น CSS ล้วน ไม่มีข้อความรายเฟรม
+             จาก client มาขยับอะไรทั้งสิ้น ระยะจากขอบล่างมาจาก Config.BottomOffset
+             ผ่านตัวแปร --rbp-bottom ที่ app.js เขียนลงมา -->
+        <div id="rbp-dock" class="rbp-dock"></div>
+
+        <!-- ข้อความสำหรับ screen reader แถบด้านบนไม่มีข้อความให้ AT อ่าน
+             จึงสะท้อน label ของรอบนั้นมาไว้ตรงนี้ ต้องมีตั้งแต่เฟรมแรกและ
+             ห้ามถูกแทนที่ — live region จะประกาศเฉพาะการเปลี่ยนแปลงที่เกิด
+             ภายใน region ที่ AT รู้จักอยู่แล้วเท่านั้น -->
+        <div id="rbp-live" class="rbp-sr" role="status" aria-live="polite" aria-atomic="true"></div>
+    </div>
+    <script src="rb-icons.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
