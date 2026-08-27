@@ -1,33 +1,84 @@
-/* ============================================================================
-   hexa_progbar · consumer layer ทับบน rb-ui.css  (rb-ui.css ต้องโหลดก่อน)
-   ----------------------------------------------------------------------------
-   พื้นผิว, สเกลตัวอักษร, ไอคอนและ track มาจาก design system ทั้งหมด:
+/* 🎨 hexa_progbar theme - standalone, tokens and idioms copied from hexa_inventory */
 
-     .rb-surface                    · พื้นผิวของกล่อง
-     .rb-progress / __bar           · ตัว track  (ดูหมายเหตุเรื่อง fill ข้างล่าง)
+/* 🔤 RDR Lino for display, Kanit for body text and as the Thai fallback */
+@font-face{font-family:'RDR Lino';src:url('assets/RDRLino-Regular.ttf') format('truetype');font-weight:400;font-style:normal;font-display:swap;}
 
-   ที่นี่มีเฉพาะสิ่งที่ rb-ui ไม่มีทางรู้เกี่ยวกับเลเยอร์ progress:
-     1. dock กลางจอด้านล่าง,
-     2. การขับ fill — .rb-progress__bar ของ rb-ui วิ่งด้วย `width` ซึ่งเป็น
-        layout property บน transition 240ms ease แต่ fill ของ progress ถูกขับ
-        ตลอดทั้งรอบ ไฟล์นี้จึงเปลี่ยนไปขับด้วย transform:scaleX แทน
-        (composite ล้วน, linear) ส่วน bar ของ rb-ui เองไม่ถูกแตะ
-     3. รูปทรงเดียวที่มี: แถบตรึงกลางจอด้านล่าง (แถบลอยเหนือหัวถูกตัดออกแล้ว),
-     4. การเข้า/ออก + สถานะจบ/ถูกยกเลิก
-   ========================================================================= */
+@font-face{font-family:'Kanit';font-style:normal;font-weight:200;font-display:swap;src:url('fonts/kanit-200-latin.woff2') format('woff2');}
+@font-face{font-family:'Kanit';font-style:normal;font-weight:200;font-display:swap;src:url('fonts/kanit-200-thai.woff2') format('woff2');unicode-range:U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC;}
+@font-face{font-family:'Kanit';font-style:normal;font-weight:300;font-display:swap;src:url('fonts/kanit-300-latin.woff2') format('woff2');}
+@font-face{font-family:'Kanit';font-style:normal;font-weight:300;font-display:swap;src:url('fonts/kanit-300-thai.woff2') format('woff2');unicode-range:U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC;}
+@font-face{font-family:'Kanit';font-style:normal;font-weight:400;font-display:swap;src:url('fonts/kanit-400-latin.woff2') format('woff2');}
+@font-face{font-family:'Kanit';font-style:normal;font-weight:400;font-display:swap;src:url('fonts/kanit-400-thai.woff2') format('woff2');unicode-range:U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC;}
+@font-face{font-family:'Kanit';font-style:normal;font-weight:500;font-display:swap;src:url('fonts/kanit-500-latin.woff2') format('woff2');}
+@font-face{font-family:'Kanit';font-style:normal;font-weight:500;font-display:swap;src:url('fonts/kanit-500-thai.woff2') format('woff2');unicode-range:U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC;}
+@font-face{font-family:'Kanit';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/kanit-600-latin.woff2') format('woff2');}
+@font-face{font-family:'Kanit';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/kanit-600-thai.woff2') format('woff2');unicode-range:U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC;}
+@font-face{font-family:'Kanit';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/kanit-700-latin.woff2') format('woff2');}
+@font-face{font-family:'Kanit';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/kanit-700-thai.woff2') format('woff2');unicode-range:U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC;}
 
-/* ---------------------------------------------------------------- layer -- */
+/* 🎛️ Tokens, names kept identical to hexa_inventory/html/main.css */
+:root{
+  --ink-void:   #000000;
+  --ink-panel:  #0a0a0a;
+  --ink-card:   #0e0e0e;
+  --ink-slot:   #131313;
+  --ink-raised: #1b1b1b;
+
+  --line-faint:  rgba(255,255,255,.05);
+  --line-soft:   rgba(255,255,255,.09);
+  --line:        rgba(255,255,255,.16);
+  --line-strong: rgba(255,255,255,.32);
+
+  --text:      #f2f2f2;
+  --text-dim:  #9a9a9a;
+  --text-mute: #616161;
+
+  --accent:    #d8d8d8;
+  --accent-hi: #ffffff;
+
+  --danger:  #b0554a;
+  --warn:    #a89463;
+  --success: #7c9772;
+
+  --font-display: 'RDR Lino', 'Kanit', 'Times New Roman', serif;
+  --font-ui:      'Kanit', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --radius: 0.3vh;
+
+  /* ⏲️ Enter/leave timing, read back by app.js so both sides share one truth */
+  --rbp-in:  .26s;
+  --rbp-out: .18s;
+
+  --ease-out:  cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --t:         .16s ease;
+}
+
+*,*::before,*::after{ margin:0; padding:0; box-sizing:border-box; }
+
+html,body{
+  width:100%; height:100%;
+  overflow:hidden;
+  background:transparent;
+  color:var(--text);
+  font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* 🗣️ Screen reader only text */
+.hx-sr{
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
+}
+
+/* 🪟 Overlay layer */
 .rbp-layer{
-  position:fixed; inset:0; z-index:var(--rb-z-modal);
-  pointer-events:none;                 /* progress ไม่กินคลิก */
+  position:fixed; inset:0; z-index:2000;
+  pointer-events:none;                 /* 🚫 The bar never eats a click */
   overflow:hidden;
 }
 
-/* --- dock กลางจอด้านล่าง ------------------------------------------------- */
-/* ค่า --rbp-* ถูกเขียนลงมาจาก app.js ตาม Config (BottomOffset/MinWidth/MaxWidth)
-   ค่าใน :root ตรงนี้เป็น fallback ตอนที่ยังไม่มีรอบไหนเริ่มเลย
-   จัดกึ่งกลางด้วย left:50% + translateX(-50%) ไม่ใช่ inset:0 + margin:auto
-   เพราะ dock ต้องกว้างเท่าแถบข้างใน (shrink-to-fit) ไม่ใช่เต็มจอ */
+/* 📌 Bottom-center dock, --rbp-* values are written by app.js from Config */
 .rbp-dock{
   --rbp-bottom:12vh;
   --rbp-min-w:34vh;
@@ -38,102 +89,252 @@
   bottom:var(--rbp-bottom);
   transform:translateX(-50%);
   display:flex; flex-direction:column-reverse; align-items:center;
-  gap:1vh;
+  gap:1.2vh;
 }
 
-/* live region ของ screen reader มีตั้งแต่เฟรมแรกและไม่ถูกสร้างใหม่ */
-.rbp-sr{
-  position:absolute; width:1px; height:1px; margin:-1px; padding:0;
-  overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap;
-}
-
-/* ================================================================== fill == */
-/* element ถูก layout เต็มความกว้างแล้วบีบด้วย scaleX เบราว์เซอร์จึงขับทั้งรอบ
-   บน compositor โดยไม่ต้องรับข้อความรายเฟรมจาก Lua เลย
-   transform-origin:left = โตจากขอบซ้าย */
-.rbp-fill{
-  height:100%; width:100%;
-  /* --rb-accent ในธีมนี้คือ #fff เพียว ๆ ซึ่งอ่านเป็นแถบขาวโพลน ใช้ accent
-     แบบหรี่แทน fill จะได้เป็นสีขาวนวลตัดกับ track */
-  background:var(--rb-accent-dim);
-  border-radius:inherit;
-  transform:scaleX(0); transform-origin:left center;
-  will-change:transform;
-}
-/* ค่า duration จริงของแต่ละรอบถูกเขียนเป็น inline `!important` ลงบน fill โดย
-   app.js — ดูหมายเหตุในไฟล์นั้น ลำดับความสำคัญนั้นตั้งใจ: reduced-motion reset
-   ของ rb-ui.css (`*{ animation-duration:.01ms !important }`) จะยุบ fill นี้ให้
-   วาบเป็น 100% ทันที ค่า 5000ms ตรงนี้เป็นแค่ fallback กรณีปกติถ้าค่า inline
-   ไม่ได้ทำงาน */
-.rbp-run .rbp-fill{
-  animation-name:rbp-fill;
-  animation-duration:5000ms;
-  animation-timing-function:linear;
-  animation-fill-mode:forwards;
-}
-@keyframes rbp-fill{ from{ transform:scaleX(0); } to{ transform:scaleX(1); } }
-
-/* รอบที่ถูกยกเลิกจะแช่ fill ไว้ตรงที่ค้างแล้วย้อมสี การ pause animation คือ
-   สิ่งที่ค้างค่าไว้ — ไม่มี width ให้อ่านย้อนกลับ */
-.rbp-cancelled .rbp-fill{ animation-play-state:paused; background:var(--rb-error); }
-.rbp-done .rbp-fill{ background:var(--rb-success); }
-
-/* ======================================================= แถบกลางจอล่าง ==== */
-/* แถบนี้อยู่หน้า HUD ของเกม ไม่ได้อยู่หน้าหญ้ากับท้องฟ้าเหมือนแถบลอยเดิม
-   จึงพึ่งพื้นผิวของ design system ได้ตรง ๆ ไม่ต้องมีขอบคมช่วยอ่าน */
+/* 🧱 The panel: inked gradient, hairline border, inner glow and a deep drop shadow */
 .rbp-bar{
-  display:flex; align-items:center; gap:1.4vh;
-  padding:1.2vh 1.8vh;
+  position:relative;
+  display:flex; align-items:center; gap:1.2vh;
+  padding:1.25vh 1.4vh 1.45vh;
   min-width:var(--rbp-min-w);
   max-width:var(--rbp-max-w);
-  background:var(--rb-surface-1);
-  border-radius:var(--rb-r-md);
-  box-shadow:var(--rb-shadow-2),var(--rb-inset-sel);
+
+  border:0.1vh solid var(--line-soft);
+  border-radius:var(--radius);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.045) 0, transparent 5vh),
+    linear-gradient(180deg, var(--ink-card) 0%, var(--ink-panel) 55%, #060606 100%);
+  box-shadow:
+    inset 0 0.1vh 0 rgba(255,255,255,.07),
+    inset 0 0 4vh rgba(0,0,0,.85),
+    0 1.4vh 4vh rgba(0,0,0,.8);
+
   will-change:transform,opacity;
+
+  /* 🎨 One color per run - icon, tick, seconds, state and track all read --c */
+  --c:var(--accent);
+
+  /* 🎬 Pure ease-out for something arriving on screen */
+  transition:opacity   var(--rbp-in) var(--ease-out),
+             transform var(--rbp-in) var(--ease-out);
 }
 
-.rbp-bar__icon{ flex-shrink:0; display:grid; place-items:center; color:var(--rb-text-2); }
-.rbp-bar__icon .material-symbols-outlined{ font-size:2.4vh; }
+/* 🔲 Inner hairline frame - the second layer that makes the panel look assembled */
+.rbp-bar::before{
+  content:"";
+  position:absolute; inset:0.5vh 0.5vh 0.7vh;
+  pointer-events:none;
+  border:0.1vh solid var(--line-faint);
+  border-radius:0.2vh;
+}
 
-/* min-width:0 คือสิ่งที่ทำให้ ellipsis ของ title ทำงาน — flex item มี
-   min-width:auto เป็นค่าตั้งต้น ซึ่งไม่ยอมหดต่ำกว่าความกว้างของข้อความ
-   แถบจึงจะทะลุ max-width ออกไปแทนที่จะตัดคำ */
-.rbp-bar__body{ flex:1; min-width:0; display:flex; flex-direction:column; gap:0.9vh; }
+/* 📐 Corner brackets, four gradients on one background, no extra elements */
+.rbp-bar::after{
+  content:"";
+  position:absolute; inset:0.5vh 0.5vh 0.7vh;
+  pointer-events:none;
+  background:
+    linear-gradient( 90deg, var(--line-strong) 0 1.5vh, transparent 1.5vh) top left     / 100% 0.1vh no-repeat,
+    linear-gradient(180deg, var(--line-strong) 0 1.5vh, transparent 1.5vh) top left     / 0.1vh 100% no-repeat,
+    linear-gradient(270deg, var(--line-strong) 0 1.5vh, transparent 1.5vh) bottom right / 100% 0.1vh no-repeat,
+    linear-gradient(  0deg, var(--line-strong) 0 1.5vh, transparent 1.5vh) bottom right / 0.1vh 100% no-repeat;
+}
 
-/* แถวหัวเรื่อง: label กับตัวเลขวินาทีที่เหลือ (ถ้าเปิด showRemaining)
-   แชร์บรรทัดเดียวกัน */
-.rbp-bar__head{ display:flex; align-items:baseline; gap:1.2vh; }
+/* 🔳 Icon slot, same idiom as .item-box-icon in inventory */
+.rbp-bar__mark{
+  position:relative; z-index:1;
+  flex:0 0 auto;
+  width:4.6vh; height:4.6vh;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--c);
+  border:0.1vh solid var(--line-faint);
+  border-radius:var(--radius);
+  background:rgba(0,0,0,.6);
+  transition:color var(--t), border-color var(--t);
+}
+.rbp-bar__mark svg{
+  width:52%; height:52%;
+  filter:drop-shadow(0 0.2vh 0.4vh rgba(0,0,0,.9));
+}
+
+/* ✂️ min-width:0 is what lets the title ellipsis work inside a flex item */
+.rbp-bar__body{
+  position:relative; z-index:1;
+  flex:1 1 auto; min-width:0;
+  display:flex; flex-direction:column;
+}
+
+/* 📏 Fixed height, so the top row is identical with or without a cancel cap */
+.rbp-bar__meta{
+  display:flex; align-items:center; gap:1vh;
+  height:1.8vh;
+}
+
+/* 🔤 State label - spells out success/cancelled, since color alone is not enough */
+.rbp-bar__state{
+  flex:1 1 auto; min-width:0;
+  color:var(--text-mute);
+  font-family:var(--font-ui);
+  font-size:0.85vh;
+  font-weight:700;
+  letter-spacing:0.16vh;
+  line-height:1.5;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  transition:color var(--t);
+}
+.rbp-done      .rbp-bar__state{ color:var(--success); }
+.rbp-cancelled .rbp-bar__state{ color:var(--danger); }
+
+/* ✋ "[BKSP] ยกเลิก" sits on the top row, so a long title clips instead of pushing it out */
+.rbp-bar__cancel{
+  flex:0 0 auto;
+  display:flex; align-items:center; gap:0.5vh;
+  transition:opacity var(--t);
+}
+
+/* ⌨️ Key cap, same idiom as .tool-btn in inventory */
+.rbp-key{
+  display:inline-grid; place-items:center;
+  min-width:2vh; height:1.6vh;
+  padding:0 0.45vh;
+  color:var(--text);
+  font-family:var(--font-ui);
+  font-size:0.82vh;
+  font-weight:700;
+  letter-spacing:0.06vh;
+  border:0.1vh solid var(--line);
+  border-radius:0.2vh;
+  background:rgba(255,255,255,.06);
+}
+.rbp-bar__cancel-txt{
+  color:var(--text-mute);
+  font-size:0.85vh;
+  font-weight:600;
+  letter-spacing:0.1vh;
+  white-space:nowrap;
+}
+
+/* 👻 Nothing left to cancel once the run ends, so the cap fades out with the state */
+.rbp-done      .rbp-bar__cancel,
+.rbp-cancelled .rbp-bar__cancel{ opacity:0; }
+
+/* ➖ Divider, same idiom as .item-box-divider */
+.rbp-bar__rule{
+  height:0.1vh;
+  margin:0.45vh 0 0.5vh;
+  background:linear-gradient(90deg, var(--line), transparent);
+}
+
+/* 📝 Title row: task name + remaining seconds */
+.rbp-bar__head{ display:flex; align-items:baseline; gap:1vh; }
+
+/* 🖊️ Gradient tick before the title, tinted by --c so it recolors with the state */
 .rbp-bar__title{
-  flex:1; min-width:0;
-  font-size:var(--rb-fs-body);
-  font-weight:var(--rb-fw-medium);
-  color:var(--rb-text);
-  line-height:1.25;
+  position:relative;
+  flex:1 1 auto; min-width:0;
+  padding-left:1vh;
+  color:var(--text);
+  font-family:var(--font-display);
+  font-size:1.6vh;
+  font-weight:400;
+  letter-spacing:0.06vh;
+  line-height:1.3;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
-.rbp-bar__time{
-  flex-shrink:0;
-  font-size:var(--rb-fs-sm);
-  font-weight:var(--rb-fw-medium);
-  color:var(--rb-text-3);
-  font-variant-numeric:tabular-nums;   /* กันแถบกระตุกทุกครั้งที่ตัวเลขเปลี่ยน */
+.rbp-bar__title::before{
+  content:"";
+  position:absolute;
+  top:0.25vh; bottom:0.25vh; left:0;
+  width:0.22vh;
+  background:linear-gradient(180deg, var(--c), transparent);
+  transition:background var(--t);
 }
-.rbp-bar__track{ height:0.7vh; }
 
-.rbp-bar.rbp-cancelled .rbp-bar__icon{ color:var(--rb-error); }
-.rbp-bar.rbp-done .rbp-bar__icon{ color:var(--rb-success); }
-.rbp-bar.rbp-cancelled .rbp-bar__time{ color:var(--rb-error); }
+/* 🔢 Reserved width + right align keeps the bar still while the digits change */
+.rbp-bar__time{
+  flex:0 0 auto;
+  min-width:4.4vh;
+  color:var(--c);
+  font-family:var(--font-display);
+  font-size:1.35vh;
+  font-weight:400;
+  letter-spacing:0.04vh;
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+  transition:color var(--t);
+}
 
-/* --------------------------------------------------------------- motion -- */
-/* เข้า/ออกด้วยการเลื่อนขึ้นจากขอบล่าง + จาง ไม่มี JS มาเขียน transform ทับ
-   รายเฟรมแล้ว (แถบลอยเดิมทำแบบนั้น จึงเข้าออกด้วย opacity ได้อย่างเดียว) */
-.rbp-bar{ transition:opacity var(--rb-t),transform var(--rb-t); }
-.rbp-bar.is-entering,
-.rbp-bar.is-leaving{ opacity:0; transform:translateY(1.6vh); }
+/* 📄 Subtitle, one step smaller and dimmer so the title is still read first */
+.rbp-bar__sub{
+  margin-top:0.25vh;
+  padding-left:1vh;
+  color:var(--text-mute);
+  font-family:var(--font-ui);
+  font-size:0.98vh;
+  font-weight:400;
+  line-height:1.35;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
 
-/* fill คือข้อมูลเอง — มันวิ่งต่อ ตัดทิ้งเฉพาะการเข้าออกที่เป็นของประดับ */
+/* 📊 Track, same idiom as .item-slot-durability: a thin rule flush with the panel edge */
+.rbp-track{
+  position:absolute;
+  right:0; bottom:0; left:0;
+  z-index:2;
+  height:0.32vh;
+  overflow:hidden;
+  border-radius:0 0 var(--radius) var(--radius);
+  background:rgba(0,0,0,.85);
+}
+
+/* 🚀 scaleX, not width - it runs on the compositor instead of relaying out every frame */
+.rbp-track__fill{
+  display:block;
+  width:100%; height:100%;
+  transform-origin:left center;
+  transform:scaleX(1);
+  background:var(--c);
+  animation-name:rbp-fill;
+  animation-timing-function:linear;
+  animation-fill-mode:forwards;
+  animation-duration:1s;               /* ⏱ Fallback only, the real value is inline from app.js */
+  transition:background-color var(--t);
+}
+@keyframes rbp-fill{ from{ transform:scaleX(0) } to{ transform:scaleX(1) } }
+
+/* 🎨 End states flip one variable, every tinted part follows */
+.rbp-bar.rbp-done     { --c:var(--success); }
+.rbp-bar.rbp-cancelled{ --c:var(--danger);  }
+
+/* 🔳 Literal rgba, not color-mix() - RedM ships CEF builds older than Chrome 111 */
+.rbp-done      .rbp-bar__mark{ border-color:rgba(124,151,114,.45); }
+.rbp-cancelled .rbp-bar__mark{ border-color:rgba(176, 85, 74,.45); }
+
+/* ⏸️ Cancelled runs freeze the fill where it stopped */
+.rbp-cancelled .rbp-track__fill{ animation-play-state:paused; }
+
+/* ✅ Success glides the fill to full instead of snapping back to its base value */
+.rbp-done .rbp-track__fill{
+  animation:none;
+  transform:scaleX(1);
+  transition:transform .24s var(--ease-out),
+             background-color var(--t);
+}
+
+/* 🎬 Enter/leave on opacity + transform only, never height or margin */
+.rbp-bar.is-entering{ opacity:0; transform:translateY(1.6vh) scale(.96); }
+
+/* 🚪 The exit gets its own curve and duration, overriding the whole transition line */
+.rbp-bar.is-leaving{
+  opacity:0; transform:translateY(0.9vh) scale(.98);
+  transition:opacity   var(--rbp-out) var(--ease-exit),
+             transform var(--rbp-out) var(--ease-exit);
+}
+
+/* 🛡️ Reduced motion touches the enter/leave polish only - never the fill, that is data */
 @media (prefers-reduced-motion:reduce){
-  .rbp-bar{ transition-duration:.01ms; }
-  .rbp-bar.is-entering,
-  .rbp-bar.is-leaving{ transform:none; }
+  :root:not(.hexa-motion) .rbp-bar{ transition-duration:.01ms; }
+  :root:not(.hexa-motion) .rbp-bar.is-entering,
+  :root:not(.hexa-motion) .rbp-bar.is-leaving{ transform:none; }
 }

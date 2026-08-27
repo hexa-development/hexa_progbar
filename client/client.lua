@@ -1,70 +1,20 @@
---[[
-    hexa_progbar - client
-    -------------------------------------------------------------------
-    Progress UI ของสแตก hexa_* — มีรูปแบบเดียว: แถบตรึงอยู่ "กลางจอ
-    ด้านล่าง" เหมือน HUD ไม่เกาะอะไรในโลกทั้งสิ้น
-
-    เดิมเป็นแถบลอยเหนือหัว/เหนือ entity/เหนือพิกัดในโลก (พอร์ตจาก
-    rb_progbar) ตอนนี้ถูกเปลี่ยนเป็นแถบบนจอทั้งหมดแล้ว ผลตามมาที่
-    ตั้งใจ: ไม่มีการฉายพิกัดโลก->จอ และไม่มีข้อความ NUI รายเฟรมอีก
-    ต่อไป ตำแหน่งเป็นเรื่องของ CSS ล้วน (ดู Config.BottomOffset)
-
-    API ยังเป็น drop-in ของ lib.progressBar (ox_lib): ชื่อออปชันเดียวกัน
-    เรียกแล้วบล็อกเหมือนกัน คืน true/false เหมือนกัน ส่วน `icon` คือของ
-    ที่เพิ่มเข้ามา
-
-    Public exports (client):
-
-      exports['hexa_progbar']:Progress(data)   -- บล็อกจนจบ/ถูกยกเลิก
-        data = {
-          duration  = ms                     (ค่าเริ่มต้น Config.DefaultDuration)
-          label     = string,                -- บรรทัดหัวเรื่อง
-          icon      = ชื่อไอคอน Material/FA   (ค่าเริ่มต้น Config.DefaultIcon)
-          canCancel = true|false             -- ให้ Config.CancelControl ยกเลิกได้
-          showRemaining = true|false         -- พิมพ์วินาทีที่เหลือ
-
-          -- ไม่ต้องขึ้นแถบกลางจอ เอาแค่ท่าทาง/prop/ล็อกปุ่ม/ปุ่มยกเลิก
-          -- สำหรับผู้เรียกที่มีที่แสดงความคืบหน้าของตัวเองอยู่แล้ว (เช่น
-          -- hexa_plants ที่ให้แถบวิ่งอยู่บน "ปุ่มในการ์ดสถานะพืช" — ถ้าไม่ปิด
-          -- ตัวนี้ผู้เล่นจะเห็นแถบสองใบพร้อมกัน) นอกนั้นทำงานเหมือนเดิมทุกอย่าง
-          -- รวมถึงค่าที่คืน
-          silent = true|false
-
-          -- เงื่อนไขที่ทำให้ล้ม (ชื่อ + ความหมายตาม ox_lib)
-          useWhileDead, allowRagdoll, allowCuffed, allowFalling, allowSwimming
-
-          anim   = { dict, clip, flag, blendIn, blendOut, ... } | { scenario }
-          prop   = { model, bone, pos, rot } | { ...หลายชิ้น }
-          disable = { move, sprint, car, combat, mouse }
-
-          -- ยังรับ `style` / `position` / `entity` / `coords` / `offsetZ`
-          -- ได้แต่ไม่มีผลแล้ว (call site เก่าอย่าง hexa_horses ส่งมาอยู่ —
-          -- ปล่อยให้ผ่านเงียบ ๆ ดีกว่าให้พัง)
-        } -> true เมื่อวิ่งจนจบ, false เมื่อถูกยกเลิก/ถูกขัด
-
-      exports['hexa_progbar']:Cancel()         -- ล้มรอบที่กำลังทำงาน
-      exports['hexa_progbar']:IsActive()       -- มีรอบทำงานอยู่ไหม
-
-    Aliases สำหรับย้ายมาจาก ox_lib แบบไม่ต้องแก้ call site:
-      progressBar / progressCircle / cancelProgress / progressActive
-
-    Net events:
-      TriggerEvent('hexa_progbar:cancel')
-]]
+-- 🎬 hexa_progbar client - screen-fixed progress bar, drop-in for ox_lib's lib.progressBar
 
 local DisableControlAction = DisableControlAction
 local DisablePlayerFiring = DisablePlayerFiring
+local IsControlPressed = IsControlPressed
+local IsDisabledControlPressed = IsDisabledControlPressed
+local IsControlJustPressed = IsControlJustPressed
+local IsDisabledControlJustPressed = IsDisabledControlJustPressed
 local GetGameTimer = GetGameTimer
 local playerState = LocalPlayer.state
 
--- รอบที่กำลังทำงาน nil = ว่าง, table = กำลังวิ่ง, false = สั่งให้หยุดแล้ว
--- สามสถานะนี้คือสิ่งที่ทำให้ผู้เรียกรายถัดไปต่อคิวหลังรอบที่วิ่งอยู่ได้
--- เหมือน ox_lib เป๊ะ ๆ: nil = "ว่าง", อย่างอื่น = "รอคิว"
+-- 🚦 nil = idle, table = running, false = told to stop (ox_lib queues on anything but nil)
 local progress = nil
 local seq = 0
 
 ------------------------------------------------------------------
--- RedM control hashes
+-- 🎮 RedM control hashes
 ------------------------------------------------------------------
 local controls = {
     INPUT_LOOK_LR = 0xA987235F,
@@ -83,7 +33,7 @@ local controls = {
 }
 
 ------------------------------------------------------------------
--- helpers
+-- 🧰 Helpers
 ------------------------------------------------------------------
 local function nextId()
     seq = seq + 1
@@ -101,9 +51,7 @@ local function requestAnimDict(dict)
     return true
 end
 
--- ตรงกับ interruptProgress ของ ox_lib: เงื่อนไขที่ทำให้รอบล้ม และผู้เรียก
--- ปิดได้ทีละข้อ ใช้เป็นด่านตรวจก่อนเริ่มด้วย — ox_lib ไม่ยอมเริ่มเลยถ้ามี
--- ข้อไหนเป็นจริงอยู่ก่อนแล้ว
+-- 🛑 Same conditions as ox_lib's interruptProgress, also used as a gate before starting
 local function interruptProgress(data)
     local ped = PlayerPedId()
     if not data.useWhileDead and IsEntityDead(ped) then return true end
@@ -115,9 +63,57 @@ local function interruptProgress(data)
 end
 
 ------------------------------------------------------------------
--- the run
+-- ✋ Cancel key
 ------------------------------------------------------------------
-local function startProgress(data, id)
+
+-- 🔇 Warn once per bad key name, not once per progress run
+local warnedKeys = {}
+
+-- 🔑 Resolve a key name / { hash, label } / raw hash into one hash + label pair
+local function resolveKey(spec)
+    local keys = type(Config.CancelKeys) == 'table' and Config.CancelKeys or {}
+
+    if type(spec) == 'table' and tonumber(spec.hash) then
+        return tonumber(spec.hash), tostring(spec.label or '?')
+    end
+
+    -- 🔢 Raw hash (legacy Config.CancelControl) - look up a label before falling back to '?'
+    if type(spec) == 'number' then
+        for name, key in pairs(keys) do
+            if key.hash == spec then return spec, tostring(key.label or name) end
+        end
+        return spec, '?'
+    end
+
+    if type(spec) == 'string' then
+        local key = keys[spec] or keys[spec:upper()]
+        if key then return tonumber(key.hash), tostring(key.label or spec:upper()) end
+
+        if not warnedKeys[spec] then
+            warnedKeys[spec] = true
+            print(('[hexa_progbar][WARN] unknown cancel key "%s" - see Config.CancelKeys, falling back to Config.CancelControl')
+                :format(spec))
+        end
+    end
+
+    return nil
+end
+
+-- 🎯 Cancel key for this run (nil = this run cannot be cancelled)
+local function cancelKeyFor(data)
+    if not data.canCancel then return nil end
+
+    local hash, label = resolveKey(data.cancelKey or Config.CancelKey)
+    if not hash then hash, label = resolveKey(Config.CancelControl) end
+    if not hash then return nil end
+
+    return hash, label
+end
+
+------------------------------------------------------------------
+-- ▶️ The run
+------------------------------------------------------------------
+local function startProgress(data, id, cancelHash)
     playerState.invBusy = true
     progress = data
 
@@ -145,6 +141,9 @@ local function startProgress(data, id)
     local startTime = GetGameTimer()
     local endTime = startTime + data.duration
 
+    -- 🔓 Cancel key only arms after it has been released once
+    local cancelArmed = false
+
     while progress do
         if disable then
             if disable.mouse then
@@ -170,17 +169,25 @@ local function startProgress(data, id)
             end
             if disable.combat then
                 DisableControlAction(0, controls.INPUT_AIM, true)
-                -- รับ PLAYER index ไม่ใช่ ped handle
+                -- 👤 Takes a PLAYER index, not a ped handle
                 DisablePlayerFiring(PlayerId(), true)
             end
         end
 
-        -- ปุ่มยกเลิก ox_lib ไม่มีปุ่มยกเลิกให้ฝั่ง RedM เลย (RegisterKeyMapping
-        -- ของมันใช้ได้เฉพาะ FiveM) ตรงนี้คือจุดที่ canCancel กลายเป็นของจริง
-        -- สำหรับผู้เล่น
-        if data.canCancel and IsControlJustReleased(0, Config.CancelControl) then
-            progress = false
-            break
+        -- ⛔ Take the key back from the game every frame, then read the Disabled branch too
+        if cancelHash then
+            DisableControlAction(0, cancelHash, true)
+
+            if not cancelArmed then
+                if not (IsControlPressed(0, cancelHash)
+                    or IsDisabledControlPressed(0, cancelHash)) then
+                    cancelArmed = true
+                end
+            elseif IsControlJustPressed(0, cancelHash)
+                or IsDisabledControlJustPressed(0, cancelHash) then
+                progress = false
+                break
+            end
         end
 
         if interruptProgress(progress) then
@@ -188,9 +195,7 @@ local function startProgress(data, id)
             break
         end
 
-        -- NUI เป็นเจ้าของนาฬิกาที่ตาเห็น ส่วนฝั่ง Lua เป็นเจ้าของความจริง
-        -- จบรอบตรงนี้ (ไม่ใช่รอ callback จาก NUI) ค่าที่คืนจึงยังตรงแม้ NUI
-        -- จะช้า ถูกซ่อน หรือไม่วาดเลย
+        -- ⏱ Lua owns the truth, the NUI only owns the clock the player sees
         if GetGameTimer() >= endTime then break end
 
         Wait(0)
@@ -205,13 +210,10 @@ local function startProgress(data, id)
     if anim then
         if anim.dict then
             StopAnimTask(PlayerPedId(), anim.dict, anim.clip, 1.0)
-            Wait(0)   -- ถ้าไม่มีบรรทัดนี้ StopAnimTask จะโดนยกเลิกเสียเอง
+            Wait(0)   -- ⏳ Without this frame the stop task cancels itself
         else
             ClearPedTasks(PlayerPedId())
-            -- ด้วยเหตุผลเดียวกับข้างบน: ClearPedTasks ไม่ได้มีผลในเฟรมที่สั่ง
-            -- ถ้าคืนค่ากลับไปเลย ผู้เรียกที่สั่งท่าใหม่ต่อทันที (เช่น hexa_plants
-            -- เอาท่าเดินถือถังกลับมาหลังรดน้ำ) จะโดนคำสั่งล้างนี้กินท่าใหม่ไปด้วย
-            -- เหลือตัวละครค้างอยู่ในท่าของ scenario ที่เพิ่งเล่นจบ
+            -- ⏳ Same reason - let the clear land before the caller queues a new task
             Wait(0)
         end
     end
@@ -219,8 +221,7 @@ local function startProgress(data, id)
     playerState.invBusy = false
     progress = nil
 
-    -- ไม่ได้ส่ง start ไปตั้งแต่แรก ก็ไม่มีรอบให้ปิด (NUI เมิน id ที่ไม่รู้จักอยู่แล้ว
-    -- แต่ไม่ส่งเลยชัดกว่า — อ่านโค้ดแล้วเห็นว่า silent ตัดทั้งเส้นทาง NUI จริง ๆ)
+    -- 🤫 Never sent a start, so there is no run to close
     if not data.silent then
         SendNUIMessage({ action = 'finish', id = id, ok = completed })
     end
@@ -228,50 +229,57 @@ local function startProgress(data, id)
 end
 
 ------------------------------------------------------------------
--- public API
+-- 📤 Public API
 ------------------------------------------------------------------
 local function Progress(data)
     if type(data) == 'string' then data = { label = data } end
     data = data or {}
 
-    -- ต่อคิวหลังรอบที่วิ่งอยู่ (ตาม ox_lib)
+    -- 🚶 Queue behind the run in flight (ox_lib behaviour)
     while progress ~= nil do Wait(0) end
 
-    -- ไม่ยอมเริ่มถ้ามีเงื่อนไขล้มอยู่ก่อนแล้ว ox_lib คืน nil ตรงนี้ ไม่ใช่
-    -- false และ call site ที่เขียนกับมันอ่านค่านี้ว่า "ไม่ได้ทำงาน"
+    -- 🚫 Refuse to start when an interrupt already holds - ox_lib returns nil here, not false
     if interruptProgress(data) then return nil end
 
     data.duration = tonumber(data.duration) or Config.DefaultDuration
 
-    -- ห้ามเขียนเป็น `(x ~= nil) and x or default`: สำนวนนั้นกลืน `false`
-    -- ที่ผู้เรียกตั้งใจส่งมาทิ้งไปเงียบ ๆ ทั้งที่มันคือค่าที่ตั้งใจส่ง
+    -- ✅ Explicit nil check, so a caller's deliberate `false` is not swallowed
     local showRemaining = Config.ShowRemaining
     if data.showRemaining ~= nil then showRemaining = data.showRemaining end
 
     local id = nextId()
 
-    -- silent = ผู้เรียกวาดความคืบหน้าเองที่อื่น (ดูหัวไฟล์) ตัดเฉพาะเส้นทาง NUI
-    -- ที่เหลือ — ท่าทาง prop ล็อกปุ่ม ปุ่มยกเลิก เงื่อนไขล้ม — เหมือนเดิมทุกข้อ
+    -- 🔑 Resolved once: the hash drives the loop, the label goes on the bar
+    local cancelHash, cancelKeyLabel = cancelKeyFor(data)
+
+    -- 🤫 silent = the caller draws progress elsewhere, everything but the NUI path still runs
     if not data.silent then
         SendNUIMessage({
             action = 'start',
             payload = {
                 id            = id,
                 label         = data.label or '',
+                -- 📄 Second line is its own row on the bar, not text glued onto the title
+                description   = data.description or nil,
                 icon          = data.icon or Config.DefaultIcon,
                 duration      = data.duration,
                 showRemaining = showRemaining and true or false,
-                -- ส่งค่าตำแหน่ง/ขนาดไปกับทุกรอบ ไม่ใช่ตอน resource สตาร์ท:
-                -- NUI อาจยังไม่พร้อมรับข้อความตอนนั้น แถมวิธีนี้ทำให้แก้ config
-                -- แล้ว restart เฉพาะฝั่ง client ก็เห็นผลทันที
+                -- 🎨 Ignored by the NUI, kept so old call sites keep working
+                accent        = data.accent or Config.Accent,
+                -- 📐 Geometry rides along every run, so a client restart shows config edits
                 bottom        = tonumber(Config.BottomOffset) or 12.0,
                 minWidth      = tonumber(Config.MinWidth) or 34.0,
                 maxWidth      = tonumber(Config.MaxWidth) or 60.0,
+                -- 🏷️ No key means no key cap, so the player never sees a dead button
+                cancel        = cancelHash and {
+                    key   = cancelKeyLabel,
+                    label = data.cancelLabel or Config.CancelLabel or 'ยกเลิก',
+                } or nil,
             }
         })
     end
 
-    return startProgress(data, id)
+    return startProgress(data, id, cancelHash)
 end
 
 local function Cancel()
@@ -283,15 +291,14 @@ local function IsActive()
 end
 
 exports('Progress', Progress)
-exports('progressBar', Progress)      -- alias สไตล์ ox_lib ไว้ย้ายมาแบบไม่ต้องแก้
+exports('progressBar', Progress)      -- 🔁 ox_lib aliases, move over without touching call sites
 exports('progressCircle', Progress)
 exports('Cancel', Cancel)
 exports('cancelProgress', Cancel)
 exports('IsActive', IsActive)
 exports('progressActive', IsActive)
 
--- Progress() บล็อก แต่ handler ของ net event ห้ามบล็อก: ถ้าถือ thread ของ
--- event ไว้ event อื่น ๆ ที่เข้ามาหา client นี้จะต่อคิวหลังรอบ progress ทั้งหมด
+-- 🧵 Progress() blocks, so run it off the event thread or every other event queues behind it
 RegisterNetEvent('hexa_progbar:start', function(data)
     CreateThread(function() Progress(data) end)
 end)
@@ -303,21 +310,13 @@ RegisterCommand('cancelprogress', function()
 end, false)
 
 ------------------------------------------------------------------
--- replicated props (พาริตี้กับ progress props ของ ox_lib)
+-- 🎒 Replicated props (parity with ox_lib progress props)
 ------------------------------------------------------------------
--- prop ถูกสร้างจาก state bag ไม่ใช่สร้างในเครื่องตัวเอง ผู้เล่นทุกคนที่อยู่
--- ในระยะจึงเห็นเครื่องมือในมือคนที่ทำงาน ไม่ใช่เห็นแค่เจ้าตัว
+
+-- 👀 Built from the state bag, so everyone nearby sees the tool, not just its owner
 local createdProps = {}
 
---- หา bone index จากสิ่งที่ call site ส่งมา — รับได้ทั้งชื่อและตัวเลข
----
---- GetPedBoneIndex รับ *bone id ที่เป็นตัวเลข* เท่านั้น แต่ config แทบทุกตัวเขียน
---- bone เป็นชื่อ ('PH_R_Hand') ตามที่สคริปต์ RedM ทั่วไปใช้กัน  ส่งสตริงเข้าไปตรง ๆ
---- จะได้ index มั่ว (0/-1) แล้ว prop ไปเกาะที่จุดกำเนิดของ ped แทนที่จะอยู่ในมือ —
---- อาการที่เห็นคือ "ของไม่ตรงกับท่า" ทั้งที่ animation ถูกต้องอยู่แล้ว
----
---- ชื่อของ RDR2 ที่ใช้บ่อย: PH_R_Hand / PH_L_Hand (จุดถือของ — ตั้งท่ามาให้แล้ว)
---- และ SKEL_R_Hand / SKEL_L_Hand (กระดูกมือจริง ต้องปรับ pos/rot เอง)
+-- 🦴 Bone index from a name or a number - GetPedBoneIndex only takes numeric bone ids
 local function resolveBone(ped, bone)
     if type(bone) == 'number' then
         return GetPedBoneIndex(ped, bone)
@@ -326,24 +325,19 @@ local function resolveBone(ped, bone)
     if type(bone) == 'string' then
         local index = GetEntityBoneIndexByName(ped, bone)
         if index and index ~= -1 then return index end
-        -- ผิดตัวพิมพ์เล็ก/ใหญ่ก็ยังหาไม่เจอในบางบิลด์ ลองรูปแบบมาตรฐานอีกที
+        -- 🔠 Some builds are case sensitive, retry the standard spellings
         for _, alt in ipairs({ bone:upper(), bone:lower() }) do
             index = GetEntityBoneIndexByName(ped, alt)
             if index and index ~= -1 then return index end
         end
     end
 
-    -- หาไม่เจอ = ให้ไปอยู่ในมือขวาไว้ก่อน ดีกว่าไปกองที่เท้า
+    -- 🤚 Not found: the right hand beats a pile of props at the ped's feet
     local fallback = GetEntityBoneIndexByName(ped, 'PH_R_Hand')
     return (fallback and fallback ~= -1) and fallback or 0
 end
 
---- แกะ x/y/z ออกมาเป็นตัวเลขล้วน
----
---- prop เดินทางมาทาง state bag ซึ่ง serialize vector3 ไม่เหมือนกันทุกบิลด์ —
---- บางทีกลับมาเป็น {x=,y=,z=} บางทีเป็น array {1,2,3}  ถ้าอ่าน .x แล้วได้ nil
---- แล้วส่ง nil เข้า AttachEntityToEntity native จะ error ทั้งบรรทัด object ที่
---- สร้างไปแล้วเลยไม่ได้ถูกผูกกับใคร = ลอยค้างอยู่กลางอากาศตรงที่มันเกิด
+-- 📍 Plain numbers out of a vector3 / {x,y,z} / array - state bags serialize both ways
 local function xyz(v)
     if type(v) == 'vector3' then return v.x + 0.0, v.y + 0.0, v.z + 0.0 end
     if type(v) == 'table' then
@@ -356,7 +350,7 @@ end
 
 local function attached(object, ped)
     local ok, res = pcall(IsEntityAttachedToEntity, object, ped)
-    -- บิลด์ที่ไม่มี native ตัวนี้: เชื่อว่าติดแล้ว ดีกว่าลบ prop ทิ้งทุกครั้ง
+    -- 🛟 Native missing on this build: assume attached rather than delete every prop
     if not ok then return true end
     return res == true or res == 1
 end
@@ -375,7 +369,7 @@ local function createProp(ped, prop)
     SetModelAsNoLongerNeeded(model)
     if not object or object == 0 then return nil end
 
-    -- prop ในมือไม่ควรไปชนอะไร และไม่ควรร่วงตามแรงโน้มถ่วงระหว่างรอผูก
+    -- 🚧 A held prop must not collide or fall while it waits to be attached
     SetEntityCollision(object, false, false)
 
     local px, py, pz = xyz(prop.pos)
@@ -386,7 +380,7 @@ local function createProp(ped, prop)
         px, py, pz, rx, ry, rz,
         true, true, false, true, prop.rotOrder or 0, true)
 
-    -- ผูกไม่ติดด้วย bone ที่ขอมา ลองซ้ำที่ bone 0 (จุดกำเนิดของ ped) ก่อนยอมแพ้
+    -- 🔁 Requested bone did not take, retry on bone 0 before giving up
     if not ok or not attached(object, ped) then
         ok, err = pcall(AttachEntityToEntity, object, ped, 0,
             px, py, pz, rx, ry, rz,
@@ -394,7 +388,7 @@ local function createProp(ped, prop)
     end
 
     if not ok or not attached(object, ped) then
-        -- ปล่อยไว้จะกลายเป็นของลอยค้างกลางอากาศให้ทุกคนเห็น ลบทิ้งดีกว่า
+        -- 🗑️ Leaving it behind means a prop floating in mid air for everyone
         print(('[hexa_progbar][ERROR][PROP_ATTACH] Failed to attach the prop to the ped | Model: %s | Bone: %s | Error: %s')
             :format(tostring(prop.model), tostring(prop.bone), tostring(err)))
         if DoesEntityExist(object) then DeleteEntity(object) end
@@ -445,7 +439,7 @@ AddStateBagChangeHandler('hexa_progbar:props', nil, function(bagName, _, value, 
 end)
 
 ------------------------------------------------------------------
--- คำสั่งทดสอบ /hexaprog
+-- 🧪 /hexaprog test command
 ------------------------------------------------------------------
 if Config.TestCommand then
     RegisterCommand('hexaprog', function(_, args)
@@ -454,8 +448,7 @@ if Config.TestCommand then
         if mode == 'cancel' then Cancel() return end
 
         if mode == 'long' then
-            -- label ยาวเกินความกว้าง เพื่อดูว่าแถบยืดถึง MaxWidth แล้วตัด
-            -- ด้วย … จริงไหม และยังอยู่กึ่งกลางจอพอดี
+            -- 📏 Over-long label, to check the bar stops at MaxWidth and clips with …
             local ok = Progress({
                 duration      = 12000,
                 label         = 'กำลังต้มยาสมุนไพรสูตรพิเศษของคุณยายอยู่ รอสักครู่นะ',

@@ -1,64 +1,82 @@
-/* hexa_progbar — NUI front-end
-   -------------------------------------------------------------------
-   รูปแบบเดียว: แถบตรึงกลางจอด้านล่าง ขับด้วยข้อความจาก client:
-
-     { action:'start',  payload:{ id,label,icon,duration,showRemaining,
-                                  bottom,minWidth,maxWidth } }
-     { action:'finish', id, ok }        -> ปิดรอบ (ok=false: ถูกยกเลิก)
-     { action:'clear' }                 -> ล้างทุกอย่างทันที
-
-   ไม่มีข้อความรายเฟรมเลย — ตำแหน่งเป็น CSS ล้วน (เดิมเป็นแถบลอยเกาะพิกัด
-   ในโลก จึงต้องรับ x/y ที่ฉายแล้วมาทุกเฟรม ตอนนี้ตัดทิ้งทั้งเส้นทาง) ส่วน
-   ที่วิ่งของแถบเป็น CSS animation ยาวเท่า `duration`
-
-   ทุกขนาดคิดเป็น vh; ฟอนต์ + token มาจาก rb-ui.css */
+/* 🖼️ hexa_progbar NUI - one screen-fixed bar driven by start / finish / clear messages */
 
 (function () {
     'use strict';
 
     var dock = document.getElementById('rbp-dock');
     var liveRegion = document.getElementById('rbp-live');
-    var runs = {};                   // id -> { el, endsAt, timeEl, raf }
+    var runs = {};                   // 🗂️ id -> { el, endsAt, timeEl, markEl, stateEl, raf }
 
-    // rb-icons แปลงชื่อ Font Awesome แบบเก่าให้ ส่วน ligature ของ Material
-    // ที่ถูกอยู่แล้วจะผ่านไปเฉย ๆ
-    function iconEl(name, cls) {
-        var el = (window.RBIcon && RBIcon.el)
-            ? RBIcon.el(name || 'hourglass_top')
-            : (function () {
-                var s = document.createElement('span');
-                s.className = 'material-symbols-outlined';
-                s.textContent = name || 'hourglass_top';
-                return s;
-            })();
+    // 🔤 State words on the bar - the result is spelled out, not signalled by color alone
+    var STATE = {
+        running:   { text: 'กำลังดำเนินการ' },
+        done:      { text: 'สำเร็จ',        icon: 'check' },
+        cancelled: { text: 'ยกเลิกแล้ว',    icon: 'close' }
+    };
+
+    // ⏲️ Ask CSS for the leave duration, so the timing lives in exactly one place
+    function cssMs(name, fallback) {
+        var raw = getComputedStyle(document.documentElement)
+            .getPropertyValue(name).trim();
+        var n = parseFloat(raw);
+        if (!isFinite(n)) return fallback;
+        return /ms\s*$/.test(raw) ? n : n * 1000;   // 🔁 Accepts both '.18s' and '180ms'
+    }
+    var LEAVE_MS = cssMs('--rbp-out', 180) + 30;
+
+    // ✏️ HexaIcon takes central, Font Awesome and Material names alike
+    function iconSvg(name) {
+        var key = (name && window.HexaIcon && HexaIcon.name(name)) ? name : 'hourglass';
+        return HexaIcon.el(key, '');
+    }
+
+    // 🔲 Icon slot - the <svg> inside is swapped for a tick or a cross when the run ends
+    function markEl(name) {
+        var box = document.createElement('div');
+        box.className = 'rbp-bar__mark';
+        box.appendChild(iconSvg(name));
+        return box;
+    }
+
+    // 🧹 Looped removal, not replaceChildren() - RedM ships CEF builds older than Chrome 86
+    function setMark(box, name) {
+        if (!box) return;
+        while (box.firstChild) box.removeChild(box.firstChild);
+        box.appendChild(iconSvg(name));
+    }
+
+    // 🏷️ Key cap comes straight from Lua, so the printed key is always the one that works
+    function cancelEl(cancel) {
         var wrap = document.createElement('div');
-        wrap.className = cls;
-        wrap.appendChild(el);
+        wrap.className = 'rbp-bar__cancel';
+
+        var cap = document.createElement('span');
+        cap.className = 'rbp-key';
+        cap.textContent = cancel.key || '?';
+
+        var txt = document.createElement('span');
+        txt.className = 'rbp-bar__cancel-txt';
+        txt.textContent = cancel.label || '';
+
+        wrap.appendChild(cap);
+        wrap.appendChild(txt);
         return wrap;
     }
 
-    // animation-duration ของ fill ถูกเขียนตรงนี้เป็นค่า inline `!important`
-    // และลำดับความสำคัญนั้นคือหัวใจ: rb-ui.css มี reduced-motion reset ระดับ
-    // ทั้งไฟล์ — `*{ animation-duration:.01ms !important }` — ซึ่งเวลาระบบ
-    // ขอ reduced motion (ปิด "เอฟเฟกต์ภาพเคลื่อนไหว" ใน Windows เป็นเรื่อง
-    // ปกติมากบนเครื่องเล่นเกม) จะยุบ fill เหลือ .01ms แล้วมันจะเด้งไป 100%
-    // ค้างทั้งรอบ ตัว fill คือ "ข้อมูล" ไม่ใช่ของประดับ มันจึงต้องรอด reset
-    // นั้นให้ได้: การประกาศ inline แบบ !important ชนะ !important ใน
-    // stylesheet ตาม cascade การใส่เป็นค่า ms ตรง ๆ (ไม่ใช่ var()) ยังทน
-    // CEF ของ RedM ได้ดีกว่าด้วย ตั้งค่าก่อน element เข้า DOM เพื่อให้
-    // animation เริ่มถูกตั้งแต่เฟรมแรก (ไม่มีอาการเต็มแป๊บ)
-    function trackEl(cls, duration) {
+    // 📊 Fill is set once and then driven by the compositor, !important shields it from resets
+    function trackEl(duration) {
         var track = document.createElement('div');
-        track.className = 'rb-progress ' + cls;
-        var fill = document.createElement('div');
-        fill.className = 'rbp-fill';
+        track.className = 'rbp-track';
+
+        var fill = document.createElement('span');
+        fill.className = 'rbp-track__fill';
         fill.style.setProperty('animation-duration', duration + 'ms', 'important');
+
         track.appendChild(fill);
         return track;
     }
 
-    // ค่าตำแหน่ง/ขนาดมากับทุกรอบ เขียนลง dock เป็นตัวแปร CSS ตัวเดียวจบ
-    // (เขียนซ้ำค่าเดิมทุกรอบไม่เสียอะไร — รอบหนึ่งมีข้อความ start ครั้งเดียว)
+    // 📐 Geometry arrives with every run and lands on the dock as CSS variables
     function applyGeometry(p) {
         var num = function (v, fallback) {
             var n = Number(v);
@@ -69,16 +87,35 @@
         dock.style.setProperty('--rbp-max-w', num(p.maxWidth, 60) + 'vh');
     }
 
-    // ---------------------------------------------------------------- build --
+    // 🧱 Layout: [icon] state ── [KEY] cancel / rule / title ── seconds / subtitle / track
     function build(p) {
         var el = document.createElement('div');
-        el.className = 'rbp-bar rbp-run is-entering';
+        el.className = 'rbp-bar is-entering';
 
-        el.appendChild(iconEl(p.icon, 'rbp-bar__icon'));
+        var mark = markEl(p.icon);
+        el.appendChild(mark);
 
         var body = document.createElement('div');
         body.className = 'rbp-bar__body';
 
+        // 🔝 Top row: state label + cancel key cap
+        var meta = document.createElement('div');
+        meta.className = 'rbp-bar__meta';
+
+        var state = document.createElement('div');
+        state.className = 'rbp-bar__state';
+        state.textContent = STATE.running.text;
+        meta.appendChild(state);
+
+        // ↔️ Cap sits on this row, so a long title clips with … instead of pushing it out
+        if (p.cancel) meta.appendChild(cancelEl(p.cancel));
+        body.appendChild(meta);
+
+        var rule = document.createElement('div');
+        rule.className = 'rbp-bar__rule';
+        body.appendChild(rule);
+
+        // 📝 Title row: task name + remaining seconds
         var head = document.createElement('div');
         head.className = 'rbp-bar__head';
         var title = document.createElement('div');
@@ -92,31 +129,39 @@
             time.className = 'rbp-bar__time';
             head.appendChild(time);
         }
-
         body.appendChild(head);
-        body.appendChild(trackEl('rbp-bar__track', p.duration));
+
+        // 📄 Subtitle gets its own line rather than being glued onto the title
+        if (p.description) {
+            var sub = document.createElement('div');
+            sub.className = 'rbp-bar__sub';
+            sub.textContent = p.description;
+            body.appendChild(sub);
+        }
+
         el.appendChild(body);
+
+        // 📊 Track lives outside the body - it spans the whole panel, not just the text column
+        el.appendChild(trackEl(p.duration));
 
         dock.appendChild(el);
 
-        // ถอด is-entering ในเฟรมถัดไป: ต้องให้เบราว์เซอร์ layout ตอนที่ยังมี
-        // คลาสอยู่ก่อน ไม่งั้นไม่มีค่าเริ่มต้นให้ transition วิ่งจาก
+        // 🎬 Drop is-entering a frame later, so the transition has a start value to run from
         requestAnimationFrame(function () {
             requestAnimationFrame(function () { el.classList.remove('is-entering'); });
         });
 
-        return { el: el, timeEl: time };
+        return { el: el, timeEl: time, markEl: mark, stateEl: state };
     }
 
-    // ---------------------------------------------------------------- clock --
-    // rAF หนึ่งตัวต่อรอบ และเฉพาะรอบที่พิมพ์เวลาที่เหลือ ส่วน fill เป็น CSS
+    // ⏱ One rAF per run, and only for runs that print the remaining seconds
     function startClock(run) {
         if (!run.timeEl) return;
         var tick = function () {
             if (!runs[run.id]) return;
             var left = Math.max(0, run.endsAt - performance.now());
             var next = (left / 1000).toFixed(1) + 's';
-            if (next !== run.lastText) {          // อย่าแตะ DOM ทุกเฟรม
+            if (next !== run.lastText) {          // 🚧 Do not touch the DOM every frame
                 run.timeEl.textContent = next;
                 run.lastText = next;
             }
@@ -130,7 +175,7 @@
         run.raf = null;
     }
 
-    // ----------------------------------------------------------------- start --
+    // ▶️ Open a run
     function start(p) {
         if (!p || !p.id) return;
         if (runs[p.id]) remove(p.id, true);
@@ -143,6 +188,8 @@
             id: p.id,
             el: built.el,
             timeEl: built.timeEl,
+            markEl: built.markEl,
+            stateEl: built.stateEl,
             endsAt: performance.now() + p.duration,
             lastText: null,
             raf: null
@@ -153,20 +200,25 @@
         if (p.label) liveRegion.textContent = p.label;
     }
 
-    // ---------------------------------------------------------------- finish --
+    // 🏁 Close a run
     function finish(id, ok) {
         var run = runs[id];
         if (!run) return;
         stopClock(run);
 
-        // แช่ fill ไว้ก่อน: .rbp-run คือคลาสที่ขับ animation และสถานะ paused
-        // ใน .rbp-cancelled จะอยู่ได้ก็ต่อเมื่อ animation ยังติดอยู่ ถ้าถอด
-        // .rbp-run ตรงนี้ แถบจะดีดกลับไป scaleX(0)
+        var s = ok ? STATE.done : STATE.cancelled;
+
+        // 🎨 One class flips --c, so icon, tick, seconds, state and track recolor together
         run.el.classList.add(ok ? 'rbp-done' : 'rbp-cancelled');
+
+        // ✅ Word and icon carry the result too, color is only the third signal
+        if (run.stateEl) run.stateEl.textContent = s.text;
+        setMark(run.markEl, s.icon);
+
         if (run.timeEl && ok) run.timeEl.textContent = '0.0s';
 
-        // ให้สถานะค้างให้อ่านสักครู่ แล้วค่อยออก
-        setTimeout(function () { remove(id, false); }, ok ? 260 : 420);
+        // ⏳ Hold the end state long enough to read it, longer when it is bad news
+        setTimeout(function () { remove(id, false); }, ok ? 460 : 640);
     }
 
     function remove(id, now) {
@@ -178,7 +230,7 @@
         var el = run.el;
         if (now) { el.remove(); return; }
         el.classList.add('is-leaving');
-        setTimeout(function () { el.remove(); }, 260);
+        setTimeout(function () { el.remove(); }, LEAVE_MS);
     }
 
     function clear() {
@@ -186,7 +238,7 @@
         liveRegion.textContent = '';
     }
 
-    // ---------------------------------------------------------------- router --
+    // 📨 Message router
     window.addEventListener('message', function (e) {
         var d = e.data || {};
         switch (d.action) {
@@ -195,4 +247,30 @@
             case 'clear':  clear(); break;
         }
     });
+
+    // 🧪 Browser preview only - loops all three states outside CEF, silent in game
+    (function demo() {
+        if (/CitizenFX/i.test(navigator.userAgent)) return;
+        document.body.style.background = 'var(--ink-void)';
+        var samples = [
+            { label:'กำลังขุด',   icon:'pickaxe', duration:6000, ok:true  },
+            { label:'กำลังเติมน้ำ', icon:'pill',    duration:4200, ok:false,
+              description:'3 / 10 หน่วย' },
+            { label:'กำลังตัดฟืน', icon:'axe',     duration:5200, ok:true  }
+        ];
+        var i = 0;
+        (function step() {
+            var s = samples[i % samples.length];
+            var id = 'demo' + (i++);
+            window.postMessage({ action:'start', payload:{
+                id:id, label:s.label, description:s.description, icon:s.icon,
+                duration:s.duration, showRemaining:true,
+                cancel:{ key:'X', label:'ยกเลิก' } } }, '*');
+            // ⏹️ Close early on some samples, so both end states show up
+            window.setTimeout(function () {
+                window.postMessage({ action:'finish', id:id, ok:s.ok }, '*');
+            }, s.duration * (s.ok ? 1 : .55));
+            window.setTimeout(step, s.duration + 1100);
+        })();
+    })();
 })();

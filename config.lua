@@ -1,67 +1,66 @@
---[[ ==================================================================
-     hexa_progbar - Configuration
-     ==================================================================
-     แถบ progress ของสแตก hexa_* — มีรูปแบบเดียวคือแถบตรึง "กลางจอ
-     ด้านล่าง" เหมือน HUD ไม่เกาะหัว ped ไม่เกาะ entity และไม่เกาะพิกัด
-     ในโลกอีกแล้ว
-
-     ค่า `style` / `position` / `entity` / `coords` / `offsetZ` ที่ผู้เรียก
-     ส่งมาจะถูกละเว้นอย่างเงียบ ๆ เพื่อให้ call site เก่ายังเรียกได้โดยไม่พัง
-     (hexa_horses ยังส่ง style='head' + entity + offsetZ มาอยู่)
-
-     ดู README.md สำหรับ API เต็ม
-     ================================================================== ]]
+-- ⚙️ hexa_progbar configuration - see README.md for the full API
 
 Config = {}
 
--- ระยะเวลา (ms) เมื่อผู้เรียกไม่ได้ส่ง `duration` มา
+-- ⏱ Default run length when the caller omits `duration`
 Config.DefaultDuration = 5000
 
--- ไอคอนเมื่อผู้เรียกไม่ได้ส่ง `icon` มา เป็นชื่อ ligature ของ Material
--- Symbols หรือชื่อ Font Awesome แบบเก่า — web/rb-icons.js แปลงให้เอง
+-- ⌛ Default icon, resolved by web/hexa-icons.js (central / Font Awesome / Material names)
 Config.DefaultIcon = 'hourglass_top'
 
-------------------------------------------------------------------
--- ตำแหน่ง/ขนาดของแถบบนจอ
-------------------------------------------------------------------
--- ทุกค่าในหมวดนี้เป็น vh (1vh = 1% ของ "ความสูง" จอ) เหมือนทั้งสแตก
--- คิดจากความสูงอย่างเดียวทั้งแนวตั้งและแนวนอน สัดส่วนจึงคงเดิมทุก
--- อัตราส่วนจอ ไม่ต้องมีค่าแยกสำหรับจอ ultrawide
+-- 🎨 Kept for old call sites only - the bar is monochrome and picks its own state colors
+Config.Accent = 'cyan'
 
--- ระยะจากขอบล่างของจอถึงขอบล่างของแถบ
--- แถบอยู่กึ่งกลางแนวนอนเสมอ (ไม่มีค่าให้ตั้ง — เป็นรูปทรงของ resource นี้)
+------------------------------------------------------------------
+-- 📐 Placement and size (all values in vh)
+------------------------------------------------------------------
+
+-- ⬇️ Gap between the bottom of the screen and the bottom of the bar
 Config.BottomOffset = 12.0
 
--- ความกว้างของแถบ ยืดตามความยาว label ระหว่างสองค่านี้
--- label ที่ยาวเกิน MaxWidth จะถูกตัดท้ายด้วย …
+-- ↔️ Bar grows with the label between these two widths, then clips with …
 Config.MinWidth = 34.0
 Config.MaxWidth = 60.0
 
--- พิมพ์วินาทีที่เหลือบนแถบ (ขวาสุดของบรรทัดหัวเรื่อง)
--- ผู้เรียกเปิด/ปิดเฉพาะครั้งได้ด้วย `showRemaining = true|false`
+-- 🔢 Print the remaining seconds on the bar (per call: `showRemaining = true|false`)
 Config.ShowRemaining = false
 
 ------------------------------------------------------------------
--- การยกเลิก
+-- ✋ Cancelling
 ------------------------------------------------------------------
--- ปุ่มที่ใช้ยกเลิก progress ที่เริ่มด้วย `canCancel = true`
--- 0xD9D0E1C0 = INPUT_FRONTEND_CANCEL (Esc / B)
+
+-- 🎯 Key that cancels a run started with `canCancel = true`
+Config.CancelKey = 'X'
+
+-- 🏷️ Text printed next to the key cap on the bar
+Config.CancelLabel = 'ยกเลิก'
+
+-- 🔑 Selectable cancel keys - hashes mirror hexa_core/shared/keybinds.lua, never use ESC
+Config.CancelKeys = {
+    BACKSPACE = { hash = 0x156F7119, label = 'BKSP'  },
+    SPACEBAR  = { hash = 0xD9D0E1C0, label = 'SPACE' },
+    TAB       = { hash = 0xB238FE0B, label = 'TAB'   },
+    X         = { hash = 0x8CC9CD42, label = 'X'     },
+    G         = { hash = 0x760A9C6F, label = 'G'     },
+    F         = { hash = 0xB2F377E8, label = 'F'     },
+}
+
+-- 🛟 Fallback when Config.CancelKey names a key that is not in the table above
 Config.CancelControl = 0xD9D0E1C0
 
--- ยกเลิกเมื่อ ped ตายกลางคัน ผู้เรียกเลือกไม่สนใจได้ด้วย
--- `useWhileDead = true` (ชื่อออปชันเดียวกับ ox_lib)
+-- 💀 Drop the run when the ped dies (per call: `useWhileDead = true`)
 Config.CancelOnDeath = true
 
 ------------------------------------------------------------------
--- props
+-- 🎒 Props
 ------------------------------------------------------------------
--- จำนวน prop สูงสุดที่ `prop = { ... }` หนึ่งชุดจะ spawn ได้
--- เกินกว่านี้จะถูกตัดเหลือ MaxProps ตัวแรก กัน call site พังไป spawn
--- object ใส่ผู้เล่นทุกคนที่อยู่ในระยะ
+
+-- 🔒 Max props one `prop = { ... }` set may spawn, extras are trimmed
 Config.MaxProps = 2
 
 ------------------------------------------------------------------
--- เบ็ดเตล็ด
+-- 🧪 Misc
 ------------------------------------------------------------------
--- ลงทะเบียนคำสั่งทดสอบ /hexaprog (client) ปิดบนเซิร์ฟจริง
+
+-- 🧰 Register the /hexaprog test command, turn off on live servers
 Config.TestCommand = true
